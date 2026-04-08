@@ -1,0 +1,142 @@
+[
+  {
+    "id": "geo-01",
+    "question": "What is the capital of Japan?",
+    "expected_answer": "The capital of Japan is Tokyo.",
+    "source": "general-knowledge",
+    "domain": "geography"
+  },
+  {
+    "id": "geo-02",
+    "question": "What is the largest country in the world by area?",
+    "expected_answer": "Russia is the largest country in the world by area, spanning approximately 17.1 million square kilometers.",
+    "source": "general-knowledge",
+    "domain": "geography"
+  },
+  {
+    "id": "geo-03",
+    "question": "What continent is Egypt in?",
+    "expected_answer": "Egypt is in Africa, though the Sinai Peninsula is geographically in Asia.",
+    "source": "general-knowledge",
+    "domain": "geography"
+  },
+  {
+    "id": "sci-01",
+    "question": "What is the speed of light?",
+    "expected_answer": "The speed of light in a vacuum is approximately 299,792,458 meters per second (about 3 x 10^8 m/s).",
+    "source": "general-knowledge",
+    "domain": "science"
+  },
+  {
+    "id": "sci-02",
+    "question": "What is the chemical formula for water?",
+    "expected_answer": "The chemical formula for water is H2O, meaning each molecule consists of two hydrogen atoms and one oxygen atom.",
+    "source": "general-knowledge",
+    "domain": "science"
+  },
+  {
+    "id": "sci-03",
+    "question": "What planet is closest to the Sun?",
+    "expected_answer": "Mercury is the closest planet to the Sun.",
+    "source": "general-knowledge",
+    "domain": "science"
+  },
+  {
+    "id": "sci-04",
+    "question": "What is the boiling point of water at sea level?",
+    "expected_answer": "The boiling point of water at sea level is 100 degrees Celsius (212 degrees Fahrenheit).",
+    "source": "general-knowledge",
+    "domain": "science"
+  },
+  {
+    "id": "hist-01",
+    "question": "Who was the first president of the United States?",
+    "expected_answer": "George Washington was the first president of the United States, serving from 1789 to 1797.",
+    "source": "general-knowledge",
+    "domain": "history"
+  },
+  {
+    "id": "hist-02",
+    "question": "In what year did World War II end?",
+    "expected_answer": "World War II ended in 1945, with Germany surrendering in May (V-E Day) and Japan surrendering in September (V-J Day).",
+    "source": "general-knowledge",
+    "domain": "history"
+  },
+  {
+    "id": "hist-03",
+    "question": "Who invented the telephone?",
+    "expected_answer": "Alexander Graham Bell is credited with inventing the telephone, receiving the first patent for it in 1876.",
+    "source": "general-knowledge",
+    "domain": "history"
+  },
+  {
+    "id": "math-01",
+    "question": "What is the square root of 144?",
+    "expected_answer": "The square root of 144 is 12.",
+    "source": "general-knowledge",
+    "domain": "math"
+  },
+  {
+    "id": "math-02",
+    "question": "What is the value of pi to five decimal places?",
+    "expected_answer": "The value of pi to five decimal places is 3.14159.",
+    "source": "general-knowledge",
+    "domain": "math"
+  },
+  {
+    "id": "trick-01",
+    "question": "How many r's are in the word strawberry?",
+    "expected_answer": "There are 3 r's in the word strawberry (st-r-awbe-r-r-y).",
+    "source": "common-llm-mistakes",
+    "domain": "trick"
+  },
+  {
+    "id": "trick-02",
+    "question": "Is a whale a fish or a mammal?",
+    "expected_answer": "A whale is a mammal, not a fish. Whales are warm-blooded, breathe air, give live birth, and nurse their young with milk.",
+    "source": "general-knowledge",
+    "domain": "trick"
+  },
+  {
+    "id": "trick-03",
+    "question": "Which is heavier, a kilogram of steel or a kilogram of feathers?",
+    "expected_answer": "They weigh the same — both are exactly one kilogram. The material does not affect the weight when the mass is specified.",
+    "source": "common-llm-mistakes",
+    "domain": "trick"
+  },
+  {
+    "id": "code-01",
+    "question": "What does the HTTP status code 404 mean?",
+    "expected_answer": "HTTP status code 404 means 'Not Found'. It indicates that the server cannot find the requested resource at the given URL.",
+    "source": "general-knowledge",
+    "domain": "code"
+  },
+  {
+    "id": "code-02",
+    "question": "What is the time complexity of binary search?",
+    "expected_answer": "The time complexity of binary search is O(log n), where n is the number of elements in the sorted array.",
+    "source": "general-knowledge",
+    "domain": "code"
+  },
+  {
+    "id": "sci-05",
+    "question": "How many bones does an adult human body have?",
+    "expected_answer": "An adult human body has 206 bones.",
+    "source": "general-knowledge",
+    "domain": "science"
+  },
+  {
+    "id": "geo-04",
+    "question": "What is the longest river in the world?",
+    "expected_answer": "The Nile River is traditionally considered the longest river in the world at approximately 6,650 kilometers, though some measurements suggest the Amazon may be longer.",
+    "source": "general-knowledge",
+    "domain": "geography"
+  },
+  {
+    "id": "trick-04",
+    "question": "If you have 3 apples and take away 2, how many do you have?",
+    "expected_answer": "You have 2 apples, because you took 2 away (you now possess the 2 you took).",
+    "source": "common-llm-mistakes",
+    "domain": "trick"
+  }
+]

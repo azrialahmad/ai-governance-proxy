@@ -46,7 +46,7 @@ MODEL_COMPLEX = "llama-3.3-70b-versatile"
 # LangChain model instances
 # ---------------------------------------------------------------------------
 
-# Gemini 1.5 Flash — via google-generativeai; reads GOOGLE_API_KEY from env
+# Gemini 2.5 Flash — via google-generativeai; reads GOOGLE_API_KEY from env
 _gemini = ChatGoogleGenerativeAI(
     model=MODEL_SIMPLE,
     temperature=0.3,

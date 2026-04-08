@@ -66,12 +66,12 @@ Rules:
 - Replace ONLY names (first, last, or full), email addresses, and phone numbers.
 - Keep all other content exactly as-is — grammar, punctuation, structure.
 - Do NOT add explanations, commentary, or extra text.
-- Output ONLY the rewritten message.
+- Do NOT wrap your output in quotes or triple-quotes.
+- If there is NOTHING to redact, return the message EXACTLY as-is with zero changes.
+- Output ONLY the rewritten message, nothing else.
 
 User message:
-\"\"\"
 {prompt}
-\"\"\"
 
 Rewritten message:"""
 )
@@ -98,6 +98,28 @@ Answer:"""
 
 _redact_chain = _REDACT_TEMPLATE | _llm | StrOutputParser()
 _malicious_chain = _MALICIOUS_TEMPLATE | _llm | StrOutputParser()
+
+
+def _clean_redaction(original: str, redacted: str) -> str:
+    """Post-process LLM redaction output to remove common artifacts."""
+    # Strip triple-quote wrappers the LLM sometimes echoes back
+    cleaned = redacted.strip()
+    if cleaned.startswith('"""') and cleaned.endswith('"""'):
+        cleaned = cleaned[3:-3].strip()
+    elif cleaned.startswith('"""'):
+        cleaned = cleaned[3:].strip()
+    elif cleaned.endswith('"""'):
+        cleaned = cleaned[:-3].strip()
+
+    # Remove a trailing [REDACTED] that the LLM hallucinated
+    # (only if the original didn't end with something that should be redacted)
+    if cleaned.endswith("[REDACTED]") and not original.rstrip().endswith("[REDACTED]"):
+        candidate = cleaned[: -len("[REDACTED]")].rstrip()
+        # Only strip it if removing it leaves the core message intact
+        if candidate:
+            cleaned = candidate
+
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -152,8 +174,10 @@ def sanitize_prompt(prompt: str) -> SanitizationResult:
         future_malicious = executor.submit(
             lambda: _malicious_chain.invoke({"prompt": prompt}).strip().upper()
         )
-        redacted_prompt: str = future_redact.result()
+        raw_redacted: str = future_redact.result()
         malicious_raw: str = future_malicious.result()
+
+    redacted_prompt = _clean_redaction(pre_redacted, raw_redacted)
 
     is_malicious: bool = malicious_raw.startswith("YES")
 
