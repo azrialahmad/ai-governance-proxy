@@ -26,7 +26,7 @@ from langchain_core.output_parsers import StrOutputParser
 # Model setup
 # ---------------------------------------------------------------------------
 
-_llm = OllamaLLM(model="llama3.2", temperature=0)
+_llm = OllamaLLM(model="gemma4:e2b", temperature=0)
 
 # ---------------------------------------------------------------------------
 # Regex patterns for deterministic PII scrubbing (fast pre-pass)
@@ -58,22 +58,15 @@ _PHONE_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 _REDACT_TEMPLATE = PromptTemplate.from_template(
-    """You are a privacy-protection assistant. Your ONLY task is to rewrite the
-user's message and replace every person's name, email address, and phone number
-with the exact token [REDACTED].
+    """You are a privacy-protection assistant. 
+Rewrite the user message and replace ONLY person names, emails, and phone numbers with [REDACTED].
 
-Rules:
-- Replace ONLY names (first, last, or full), email addresses, and phone numbers.
-- Keep all other content exactly as-is — grammar, punctuation, structure.
-- Do NOT add explanations, commentary, or extra text.
-- Do NOT wrap your output in quotes or triple-quotes.
-- If there is NOTHING to redact, return the message EXACTLY as-is with zero changes.
-- Output ONLY the rewritten message, nothing else.
+IMPORTANT:
+- DO NOT redact common nouns, fruits, objects, or locations (e.g., Japan, strawberry).
+- DO NOT answer questions. ONLY return the rewritten text.
 
-User message:
-{prompt}
-
-Rewritten message:"""
+In: {prompt}
+Out:"""
 )
 
 _MALICIOUS_TEMPLATE = PromptTemplate.from_template(

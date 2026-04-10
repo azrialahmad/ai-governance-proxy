@@ -14,10 +14,14 @@ POST /chat  { "prompt": "<user text>" }
     ├─ 2. [Guard] If is_malicious → 400 Bad Request (prompt rejected)
     │
     ├─ 3. router.route_prompt()
-    │       • < 50 words & simple  → Gemini 1.5 Flash
+    │       • < 50 words & simple  → Gemini Flash
     │       • complex / code       → Llama-3-70b on Groq
     │
-    └─ 4. Return response + metadata to caller
+    ├─ 4. fact_checker.check_factuality()
+    │       • Compares response to golden-set source of truth
+    │       • Score < 70% → block response (hallucination detected)
+    │
+    └─ 5. Return response + metadata to caller
 
 Run locally
 -----------
@@ -25,7 +29,7 @@ Run locally
 """
 
 import time
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,6 +40,7 @@ load_dotenv()  # Load API keys from .env before LangChain models are initialized
 
 from proxy.security import sanitize_prompt
 from proxy.router import route_prompt
+from evaluators.fact_checker import check_factuality
 
 
 # ---------------------------------------------------------------------------
@@ -45,10 +50,10 @@ from proxy.router import route_prompt
 app = FastAPI(
     title="Gatekeeper Proxy",
     description=(
-        "An AI proxy that sanitizes PII, detects jailbreak attempts, "
-        "and intelligently routes prompts to the most suitable model."
+        "An AI governance proxy that sanitizes PII, detects jailbreak attempts, "
+        "intelligently routes prompts, and judges responses for hallucinations."
     ),
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -67,6 +72,14 @@ class PromptRequest(BaseModel):
     prompt: Annotated[str, Field(min_length=1, max_length=8000, examples=["Tell me a joke."])]
 
 
+class FactualityInfo(BaseModel):
+    score: Optional[int] = None
+    passed: Optional[bool] = None
+    reasoning: Optional[str] = None
+    matched_question: Optional[str] = None
+    threshold: int = 70
+
+
 class ChatResponse(BaseModel):
     response: str
     model_used: str
@@ -74,6 +87,7 @@ class ChatResponse(BaseModel):
     word_count: int
     is_complex: bool
     is_malicious: bool
+    factuality: FactualityInfo
     latency_ms: float
 
 
@@ -108,7 +122,8 @@ def chat(request: PromptRequest) -> ChatResponse:
     1. **Sanitize** – strip PII and check for jailbreak intent.
     2. **Guard** – reject the request if a jailbreak is detected.
     3. **Route** – forward the clean prompt to the right model.
-    4. **Respond** – return the model's answer plus pipeline metadata.
+    4. **Fact-Check** – judge the response for hallucinations.
+    5. **Respond** – return the model's answer plus pipeline metadata.
     """
     t_start = time.perf_counter()
 
@@ -130,9 +145,45 @@ def chat(request: PromptRequest) -> ChatResponse:
     # ── Step 3: Route ────────────────────────────────────────────────────────
     routing_result = route_prompt(redacted_prompt)
 
+    # ── Step 4: Fact-Check ───────────────────────────────────────────────────
+    fact_result = check_factuality(
+        question=request.prompt,
+        ai_response=routing_result["response"],
+    )
+
+    factuality = FactualityInfo(
+        score=fact_result["score"],
+        passed=fact_result["passed"],
+        reasoning=fact_result["reasoning"],
+        matched_question=fact_result["matched_question"],
+        threshold=fact_result["threshold"],
+    )
+
+    # If a fact-check was performed and the response failed → block it
+    if fact_result["passed"] is False:
+        latency_ms = (time.perf_counter() - t_start) * 1000
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": (
+                    "The AI is hallucinating; try again. "
+                    f"(Factuality Score: {fact_result['score']}%)"
+                ),
+                "raw_ai_response": routing_result["response"],
+                "redacted_prompt": redacted_prompt,
+                "factuality": {
+                    "score": fact_result["score"],
+                    "threshold": fact_result["threshold"],
+                    "reasoning": fact_result["reasoning"],
+                    "matched_question": fact_result["matched_question"],
+                },
+                "latency_ms": round(latency_ms, 2),
+            },
+        )
+
     latency_ms = (time.perf_counter() - t_start) * 1000
 
-    # ── Step 4: Respond ──────────────────────────────────────────────────────
+    # ── Step 5: Respond ──────────────────────────────────────────────────────
     return ChatResponse(
         response=routing_result["response"],
         model_used=routing_result["model_used"],
@@ -140,6 +191,7 @@ def chat(request: PromptRequest) -> ChatResponse:
         word_count=routing_result["word_count"],
         is_complex=routing_result["is_complex"],
         is_malicious=is_malicious,
+        factuality=factuality,
         latency_ms=round(latency_ms, 2),
     )
 
