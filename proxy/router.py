@@ -65,12 +65,16 @@ MODEL_COMPLEX = "llama-3.3-70b-versatile"
 _gemini = ChatGoogleGenerativeAI(
     model=MODEL_SIMPLE,
     temperature=0.3,
+    max_retries=0,
+    timeout=1.5,
 )
 
 # Llama-3-70b on Groq — reads GROQ_API_KEY from env
 _groq = ChatGroq(
     model_name=MODEL_COMPLEX,
     temperature=0.3,
+    max_retries=0,
+    timeout=1.5,
 )
 
 # ---------------------------------------------------------------------------
