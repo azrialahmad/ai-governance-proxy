@@ -8,3 +8,4 @@ __pycache__/
 pkg_list.txt
 smoke_test_output.txt
 excalidraw-diagram-skill-main
+.agents/
