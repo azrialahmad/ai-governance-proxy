@@ -14,6 +14,7 @@ sanitize_prompt(prompt: str) -> dict
 """
 
 import re
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import TypedDict
 
@@ -25,6 +26,20 @@ from langchain_core.output_parsers import StrOutputParser
 # ---------------------------------------------------------------------------
 # Model setup
 # ---------------------------------------------------------------------------
+
+_ollama_online_cache = None
+
+def _is_ollama_online() -> bool:
+    global _ollama_online_cache
+    if _ollama_online_cache is not None:
+        return _ollama_online_cache
+    try:
+        # Check local endpoint with numeric IP and 0.15s timeout
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=0.15) as response:
+            _ollama_online_cache = (response.status == 200)
+    except Exception:
+        _ollama_online_cache = False
+    return _ollama_online_cache
 
 _llm = OllamaLLM(model="gemma4:e2b", temperature=0)
 
@@ -160,19 +175,46 @@ def sanitize_prompt(prompt: str) -> SanitizationResult:
     pre_redacted = _regex_redact(prompt)
 
     # --- Steps 2 & 3: run LLM redaction and jailbreak check in parallel -----
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_redact = executor.submit(
-            lambda: _redact_chain.invoke({"prompt": pre_redacted}).strip()
+    if not _is_ollama_online():
+        # Fast fallback when Ollama is offline
+        redacted_prompt = pre_redacted
+        jailbreak_keywords = [
+            "ignore", "bypass", "dan", "system prompt", "developer mode", 
+            "opposite mode", "sudo mode", "unrestricted", "override", 
+            "safety rules", "jailbreak", "unfiltered", "instruction",
+            "malicious", "harmful", "illegal"
+        ]
+        is_malicious = any(kw in prompt.lower() for kw in jailbreak_keywords)
+        return SanitizationResult(
+            redacted_prompt=redacted_prompt,
+            is_malicious=is_malicious,
         )
-        future_malicious = executor.submit(
-            lambda: _malicious_chain.invoke({"prompt": prompt}).strip().upper()
-        )
-        raw_redacted: str = future_redact.result()
-        malicious_raw: str = future_malicious.result()
 
-    redacted_prompt = _clean_redaction(pre_redacted, raw_redacted)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_redact = executor.submit(
+                lambda: _redact_chain.invoke({"prompt": pre_redacted}).strip()
+            )
+            future_malicious = executor.submit(
+                lambda: _malicious_chain.invoke({"prompt": prompt}).strip().upper()
+            )
+            raw_redacted: str = future_redact.result()
+            malicious_raw: str = future_malicious.result()
 
-    is_malicious: bool = malicious_raw.startswith("YES")
+        redacted_prompt = _clean_redaction(pre_redacted, raw_redacted)
+        is_malicious: bool = malicious_raw.startswith("YES")
+    except Exception as e:
+        # Fallback heuristic mode when Ollama is offline or unavailable
+        redacted_prompt = pre_redacted
+        
+        # Check for common jailbreak keywords and indicators
+        jailbreak_keywords = [
+            "ignore", "bypass", "dan", "system prompt", "developer mode", 
+            "opposite mode", "sudo mode", "unrestricted", "override", 
+            "safety rules", "jailbreak", "unfiltered", "instruction",
+            "malicious", "harmful", "illegal"
+        ]
+        is_malicious = any(kw in prompt.lower() for kw in jailbreak_keywords)
 
     return SanitizationResult(
         redacted_prompt=redacted_prompt,

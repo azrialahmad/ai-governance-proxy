@@ -29,10 +29,12 @@ Run locally
 """
 
 import time
+from pathlib import Path
 from typing import Annotated, Optional
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
@@ -41,6 +43,7 @@ load_dotenv()  # Load API keys from .env before LangChain models are initialized
 from proxy.security import sanitize_prompt
 from proxy.router import route_prompt
 from evaluators.fact_checker import check_factuality
+from evaluators.metrics import log_request, get_session_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -99,10 +102,31 @@ class ErrorResponse(BaseModel):
 # Routes
 # ---------------------------------------------------------------------------
 
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+def read_dashboard():
+    """Serve the visual analytics and testing dashboard."""
+    dashboard_path = Path(__file__).resolve().parent.parent / "dashboard" / "index.html"
+    if not dashboard_path.exists():
+        return HTMLResponse(
+            "<html><body><h1>Dashboard file not found.</h1><p>Please ensure dashboard/index.html is created.</p></body></html>",
+            status_code=404
+        )
+    with open(dashboard_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+    return HTMLResponse(content=html_content, status_code=200)
+
+
 @app.get("/health", tags=["ops"])
 def health_check():
     """Liveness probe."""
     return {"status": "ok"}
+
+
+@app.get("/metrics", tags=["ops"])
+def get_metrics():
+    """Get overall proxy execution metrics."""
+    return get_session_metrics()
 
 
 @app.post(
@@ -134,6 +158,17 @@ def chat(request: PromptRequest) -> ChatResponse:
 
     # ── Step 2: Guard ────────────────────────────────────────────────────────
     if is_malicious:
+        latency_ms = (time.perf_counter() - t_start) * 1000
+        # Log blocked request
+        log_request(
+            prompt=request.prompt,
+            redacted_prompt=redacted_prompt,
+            is_malicious=True,
+            model_used="none",
+            is_complex=False,
+            factuality_score=None,
+            latency_ms=latency_ms
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -162,6 +197,16 @@ def chat(request: PromptRequest) -> ChatResponse:
     # If a fact-check was performed and the response failed → block it
     if fact_result["passed"] is False:
         latency_ms = (time.perf_counter() - t_start) * 1000
+        # Log hallucination-blocked request
+        log_request(
+            prompt=request.prompt,
+            redacted_prompt=redacted_prompt,
+            is_malicious=False,
+            model_used=routing_result["model_used"],
+            is_complex=routing_result["is_complex"],
+            factuality_score=fact_result["score"],
+            latency_ms=latency_ms
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -182,6 +227,17 @@ def chat(request: PromptRequest) -> ChatResponse:
         )
 
     latency_ms = (time.perf_counter() - t_start) * 1000
+
+    # Log successful request
+    log_request(
+        prompt=request.prompt,
+        redacted_prompt=redacted_prompt,
+        is_malicious=False,
+        model_used=routing_result["model_used"],
+        is_complex=routing_result["is_complex"],
+        factuality_score=fact_result["score"],
+        latency_ms=latency_ms
+    )
 
     # ── Step 5: Respond ──────────────────────────────────────────────────────
     return ChatResponse(
@@ -204,3 +260,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("proxy.main:app", host="0.0.0.0", port=8000, reload=True)
+

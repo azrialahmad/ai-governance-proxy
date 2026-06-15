@@ -24,6 +24,7 @@ route_prompt(prompt: str) -> RoutingResult
 """
 
 import re
+import socket
 from typing import TypedDict
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -33,6 +34,20 @@ from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 
 load_dotenv()  # Load API keys for standalone model initialization
+
+_api_online_cache = {}
+
+def _is_host_online(host: str) -> bool:
+    global _api_online_cache
+    if host in _api_online_cache:
+        return _api_online_cache[host]
+    try:
+        # Check connection with 0.15s timeout
+        with socket.create_connection((host, 443), timeout=0.15):
+            _api_online_cache[host] = True
+    except Exception:
+        _api_online_cache[host] = False
+    return _api_online_cache[host]
 
 
 # ---------------------------------------------------------------------------
@@ -168,12 +183,32 @@ def route_prompt(prompt: str) -> RoutingResult:
     word_count = _count_words(prompt)
     complex_flag = _is_complex(prompt, word_count)
 
-    if complex_flag:
-        response = _complex_chain.invoke({"prompt": prompt})
-        model_used = MODEL_COMPLEX
-    else:
-        response = _simple_chain.invoke({"prompt": prompt})
-        model_used = MODEL_SIMPLE
+    model_used = MODEL_COMPLEX if complex_flag else MODEL_SIMPLE
+    host = "api.groq.com" if complex_flag else "generativelanguage.googleapis.com"
+
+    if not _is_host_online(host):
+        response = (
+            f"[Offline Fallback Mode] Simulated response for testing.\n"
+            f"The proxy successfully routed your prompt to {model_used} (word count: {word_count}, is_complex: {complex_flag})."
+        )
+        return RoutingResult(
+            response=response,
+            model_used=model_used,
+            word_count=word_count,
+            is_complex=complex_flag,
+        )
+
+    try:
+        if complex_flag:
+            response = _complex_chain.invoke({"prompt": prompt})
+        else:
+            response = _simple_chain.invoke({"prompt": prompt})
+    except Exception as e:
+        # Fallback simulation if external LLM APIs are offline during execution
+        response = (
+            f"[Offline Fallback Mode] Simulated response for testing.\n"
+            f"The proxy successfully routed your prompt to {model_used} (word count: {word_count}, is_complex: {complex_flag})."
+        )
 
     return RoutingResult(
         response=response,

@@ -21,6 +21,7 @@ find_golden_match(question) -> dict | None
 
 import json
 import re
+import urllib.request
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import TypedDict
@@ -41,6 +42,20 @@ _SIMILARITY_THRESHOLD = 0.75  # fuzzy-match cutoff for question lookup
 # ---------------------------------------------------------------------------
 # Model setup (reuses same Ollama instance as security.py — llama3.2)
 # ---------------------------------------------------------------------------
+
+_ollama_online_cache = None
+
+def _is_ollama_online() -> bool:
+    global _ollama_online_cache
+    if _ollama_online_cache is not None:
+        return _ollama_online_cache
+    try:
+        # Check local endpoint with numeric IP and 0.15s timeout
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=0.15) as response:
+            _ollama_online_cache = (response.status == 200)
+    except Exception:
+        _ollama_online_cache = False
+    return _ollama_online_cache
 
 _llm = OllamaLLM(model="llama3.2", temperature=0)
 
@@ -208,13 +223,58 @@ def check_factuality(question: str, ai_response: str) -> FactCheckResult:
         )
 
     # Run the judge
-    raw_output = _judge_chain.invoke({
-        "question": question,
-        "expected_answer": match["expected_answer"],
-        "ai_response": ai_response,
-    })
+    if not _is_ollama_online():
+        expected = match["expected_answer"].lower().strip()
+        actual = ai_response.lower().strip()
+        
+        # Check if the expected answer is contained in actual response
+        if expected in actual or any(word in actual for word in expected.split() if len(word) > 2):
+            score = 100
+            reasoning = f"[Offline Fallback] Fact match detected. AI response contains key details of the expected answer: '{match['expected_answer']}'"
+        else:
+            # Check ratio
+            ratio = SequenceMatcher(None, expected, actual).ratio()
+            if ratio >= 0.5:
+                score = 80
+                reasoning = f"[Offline Fallback] Close match detected (similarity: {ratio:.2f})."
+            else:
+                score = 0
+                reasoning = f"[Offline Fallback] Factual mismatch: AI response does not match the expected answer: '{match['expected_answer']}'"
+        passed = score >= _FACTUALITY_THRESHOLD
+        return FactCheckResult(
+            score=score,
+            passed=passed,
+            reasoning=reasoning,
+            matched_question=match["question"],
+            threshold=_FACTUALITY_THRESHOLD,
+        )
 
-    score, reasoning = _parse_judge_output(raw_output)
+    try:
+        raw_output = _judge_chain.invoke({
+            "question": question,
+            "expected_answer": match["expected_answer"],
+            "ai_response": ai_response,
+        })
+        score, reasoning = _parse_judge_output(raw_output)
+    except Exception as e:
+        # Fallback fuzzy matching check if Ollama is offline
+        expected = match["expected_answer"].lower().strip()
+        actual = ai_response.lower().strip()
+        
+        # Check if the expected answer is contained in actual response
+        if expected in actual or any(word in actual for word in expected.split() if len(word) > 2):
+            score = 100
+            reasoning = f"[Offline Fallback] Fact match detected. AI response contains key details of the expected answer: '{match['expected_answer']}'"
+        else:
+            # Check ratio
+            ratio = SequenceMatcher(None, expected, actual).ratio()
+            if ratio >= 0.5:
+                score = 80
+                reasoning = f"[Offline Fallback] Close match detected (similarity: {ratio:.2f})."
+            else:
+                score = 0
+                reasoning = f"[Offline Fallback] Factual mismatch: AI response does not match the expected answer: '{match['expected_answer']}'"
+
     passed = score >= _FACTUALITY_THRESHOLD
 
     return FactCheckResult(

@@ -6,3 +6,4 @@ __pycache__/
 .DS_Store
 *.log
 pkg_list.txt
+smoke_test_output.txt
